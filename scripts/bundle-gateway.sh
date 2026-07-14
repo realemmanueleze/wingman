@@ -43,16 +43,24 @@ if [[ -n "${OPENCLAW_SOURCE_DIR:-}" ]]; then
   echo "==> Building OpenClaw from source: $SOURCE_DIR (our fork)"
   pushd "$SOURCE_DIR" >/dev/null
   corepack enable >/dev/null 2>&1 || true
+  # GIT_DIR points at a bogus path on purpose: the vendored copy lives inside
+  # the Wingman repo where its files are untracked, and OpenClaw's build
+  # collects bundled plugins via `git ls-files` (empty here → no channel
+  # plugins built). Failing git forces the directory-scan fallback.
+  # The changelog still says Unreleased for this dev version, so pack must
+  # allow it.
+  export GIT_DIR="$SOURCE_DIR/.git-disabled-for-vendor-build"
+  export OPENCLAW_PREPACK_ALLOW_UNRELEASED_CHANGELOG=1
   pnpm install
   pnpm build
-  echo "==> Packing built fork via npm pack"
-  PACK_FILE="$("$STAGE/node/bin/npm" pack --pack-destination /tmp 2>/dev/null | tail -1)"
-  popd >/dev/null
-  mkdir -p "$STAGE/openclaw"
-  tar -xzf "/tmp/$PACK_FILE" -C "$STAGE/openclaw" --strip-components 1
-  rm -f "/tmp/$PACK_FILE"
-  pushd "$STAGE/openclaw" >/dev/null
-  "$STAGE/node/bin/npm" install --omit=dev --no-fund --no-audit
+  # pnpm deploy materializes workspace:* deps as real copies, so the staged
+  # gateway is fully self-contained without publishing internal packages.
+  # (npm pack would pin unpublished dev versions of @openclaw/* and fail.)
+  echo "==> Deploying built fork via pnpm deploy"
+  # --legacy: repo pins pnpm v10+, which otherwise requires
+  # inject-workspace-packages; legacy copy-deploy is exactly what we want.
+  pnpm --filter openclaw deploy --prod --legacy "$STAGE/openclaw"
+  unset GIT_DIR OPENCLAW_PREPACK_ALLOW_UNRELEASED_CHANGELOG
   popd >/dev/null
 else
   echo "==> Installing $OPENCLAW_SPEC from npm"

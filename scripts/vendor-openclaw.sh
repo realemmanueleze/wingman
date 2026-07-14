@@ -22,10 +22,17 @@ echo "==> Vendoring OpenClaw from $SOURCE"
 rm -rf "$DEST"
 mkdir -p "$DEST"
 
+# apps/shared stays: the Control UI build imports resources from it
+# (e.g. OpenClawKit tool-display.json). Only the platform apps are pruned.
 rsync -a \
   --exclude "node_modules" \
   --exclude ".git" \
-  --exclude "apps/" \
+  --exclude "apps/ios/" \
+  --exclude "apps/android/" \
+  --exclude "apps/macos/" \
+  --exclude "apps/macos-mlx-tts/" \
+  --exclude "apps/linux/" \
+  --exclude "apps/swabble/" \
   --exclude "docs/" \
   --exclude "test/" \
   --exclude "qa/" \
