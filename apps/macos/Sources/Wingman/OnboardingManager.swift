@@ -103,6 +103,12 @@ final class OnboardingManager: ObservableObject {
         agents["defaults"] = defaults
         config["agents"] = agents
 
+        // Canonical local-gateway marker so future boots don't rely on
+        // --allow-unconfigured.
+        var gateway = config["gateway"] as? [String: Any] ?? [:]
+        if gateway["mode"] == nil { gateway["mode"] = "local" }
+        config["gateway"] = gateway
+
         try FileManager.default.createDirectory(
             at: configDirectory, withIntermediateDirectories: true
         )

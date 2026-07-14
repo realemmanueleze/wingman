@@ -114,9 +114,15 @@ final class GatewaySidecar: ObservableObject {
         if let bundledNode, let bundledEntry,
            FileManager.default.isExecutableFile(atPath: bundledNode.path),
            FileManager.default.fileExists(atPath: bundledEntry.path) {
+            // `gateway run` = foreground child we supervise; --allow-unconfigured
+            // lets the very first boot succeed before the wizard writes config.
             return GatewayCommand(
                 executable: bundledNode,
-                arguments: [bundledEntry.path, "gateway", "--port", String(port)]
+                arguments: [
+                    bundledEntry.path, "gateway", "run",
+                    "--port", String(port),
+                    "--allow-unconfigured",
+                ]
             )
         }
 

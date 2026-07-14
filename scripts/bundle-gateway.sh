@@ -7,7 +7,7 @@
 # Wingman.app that needs no system Node and no terminal setup.
 #
 # Env overrides:
-#   NODE_VERSION         (default 22.19.0)
+#   NODE_VERSION         (default 22.22.3, must satisfy openclaw engines)
 #   OPENCLAW_SPEC        npm spec to install (default openclaw@latest)
 #   OPENCLAW_SOURCE_DIR  build from OUR fork instead of npm (e.g. vendor/openclaw).
 #                        Runs pnpm install + build there, then stages the result —
@@ -16,7 +16,8 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STAGE="$REPO_ROOT/apps/macos/Resources/gateway"
-NODE_VERSION="${NODE_VERSION:-22.19.0}"
+# Must satisfy openclaw's engines range (>=22.22.3 <23 || >=24.15.0 <25).
+NODE_VERSION="${NODE_VERSION:-22.22.3}"
 OPENCLAW_SPEC="${OPENCLAW_SPEC:-openclaw@latest}"
 ARCH="$(uname -m)"
 case "$ARCH" in
