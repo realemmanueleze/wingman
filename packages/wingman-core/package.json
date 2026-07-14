@@ -1,0 +1,16 @@
+{
+  "name": "@wingman/core",
+  "version": "0.1.0",
+  "description": "Shared cross-platform core for Wingman: gateway protocol subset, pointing contract, and turn policy. Consumed by every platform shell (macOS, Windows, mobile).",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  },
+  "license": "MIT"
+}

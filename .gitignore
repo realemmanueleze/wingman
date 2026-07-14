@@ -1,0 +1,6 @@
+.DS_Store
+dist/
+apps/macos/.build/
+apps/macos/Resources/gateway/
+packages/*/node_modules/
+packages/*/dist/
