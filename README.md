@@ -2,8 +2,8 @@
 
 One desktop product combining two inspirations:
 
-- **OpenClaw** (`Inspirations/openclaw-main`) — the brain: an always-on agent gateway with tools, memory, channels, and model routing.
-- **Clicky** (`Inspirations/clicky-main`) — the face: a screen companion that sees your displays, talks, and points at UI.
+- **OpenClaw** (vendored fork at `vendor/openclaw`) — the brain: an always-on agent gateway with tools, memory, channels, and model routing.
+- **Clicky** (patterns reimplemented in `apps/macos`) — the face: a screen companion that sees your displays, talks, and points at UI.
 
 Wingman is a macOS menu-bar app that embeds an OpenClaw Gateway as a supervised sidecar and layers a Clicky-style buddy cursor on top. Hold **⌃⌥** anywhere, speak, and the assistant sees your screen, answers out loud, and flies a pointer to the relevant UI. Switch modes to let it actually do the work through gateway tools.
 
@@ -16,7 +16,7 @@ Wingman is a macOS menu-bar app that embeds an OpenClaw Gateway as a supervised 
 | `apps/windows/`, `apps/mobile/` | Platform roadmaps — same brain, new shells |
 | `scripts/` | `make-app.sh` (assemble Wingman.app), `bundle-gateway.sh` (stage Node + openclaw into the bundle) |
 | `docs/` | `ARCHITECTURE.md`, `HARD-PROBLEMS.md` |
-| `Inspirations/` | Clicky + OpenClaw source snapshots |
+| `vendor/openclaw/` | Our OpenClaw fork (source-only; builds ship inside the app) |
 
 ## For non-technical users
 
@@ -31,12 +31,17 @@ No terminal at any point. The chat window (menu bar → **Open chat**) is the Cl
 
 ## Our OpenClaw fork
 
-`vendor/openclaw/` is our fork baseline (runtime + plugins + UI, pruned of upstream docs/tests/CI). We self-improve it from here and ship it inside the app:
+`vendor/openclaw/` is our fork baseline, committed to this repo (runtime + plugins + UI, pruned of upstream docs/tests/CI). We self-improve it from here and ship it inside the app:
 
 ```bash
-make vendor-openclaw       # (re)copy the snapshot into vendor/openclaw
 make gateway-bundle-fork   # build OUR fork and stage it into the app bundle
 make app                   # → dist/Wingman.app with our gateway inside
+```
+
+To pull in a newer upstream release, download/clone it and refresh the baseline, then review the diff and commit:
+
+```bash
+make vendor-openclaw SRC=/path/to/downloaded/openclaw-main
 ```
 
 `make gateway-bundle` still exists to bundle stock openclaw from npm instead.

@@ -16,9 +16,10 @@ app-release:
 gateway-bundle:
 	bash scripts/bundle-gateway.sh
 
-# Copy the OpenClaw snapshot into vendor/openclaw — our fork baseline
+# Refresh vendor/openclaw from a downloaded OpenClaw checkout:
+#   make vendor-openclaw SRC=/path/to/openclaw-main
 vendor-openclaw:
-	bash scripts/vendor-openclaw.sh
+	bash scripts/vendor-openclaw.sh "$(SRC)"
 
 # Stage the gateway from OUR fork (vendor/openclaw) instead of npm
 gateway-bundle-fork:

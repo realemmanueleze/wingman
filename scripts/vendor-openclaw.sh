@@ -6,12 +6,21 @@
 # Excludes non-runtime weight (native companion apps, docs site, test suites,
 # CI) — we keep core runtime, plugins, UI, packages, and skills.
 #
-# Usage: scripts/vendor-openclaw.sh [source-dir]
+# Usage: scripts/vendor-openclaw.sh <source-dir>
+#   source-dir: a downloaded/cloned OpenClaw checkout to refresh the
+#               vendor baseline from. vendor/openclaw is tracked in git,
+#               so review the diff after refreshing and commit it.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SOURCE="${1:-$REPO_ROOT/Inspirations/openclaw-main}"
+SOURCE="${1:-}"
 DEST="$REPO_ROOT/vendor/openclaw"
+
+if [[ -z "$SOURCE" ]]; then
+  echo "Usage: scripts/vendor-openclaw.sh <path-to-openclaw-checkout>" >&2
+  echo "Download or clone a newer OpenClaw, then point this script at it." >&2
+  exit 1
+fi
 
 if [[ ! -f "$SOURCE/openclaw.mjs" ]]; then
   echo "Source does not look like an OpenClaw checkout: $SOURCE" >&2
