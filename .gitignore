@@ -4,3 +4,4 @@ apps/macos/.build/
 apps/macos/Resources/gateway/
 packages/*/node_modules/
 packages/*/dist/
+vendor/openclaw/node_modules/

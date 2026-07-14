@@ -7,8 +7,11 @@
 # Wingman.app that needs no system Node and no terminal setup.
 #
 # Env overrides:
-#   NODE_VERSION   (default 22.19.0)
-#   OPENCLAW_SPEC  npm spec to install (default openclaw@latest)
+#   NODE_VERSION         (default 22.19.0)
+#   OPENCLAW_SPEC        npm spec to install (default openclaw@latest)
+#   OPENCLAW_SOURCE_DIR  build from OUR fork instead of npm (e.g. vendor/openclaw).
+#                        Runs pnpm install + build there, then stages the result —
+#                        this is how self-improved OpenClaw ships inside Wingman.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -33,16 +36,35 @@ mkdir -p "$STAGE/node"
 tar -xzf "/tmp/$NODE_TARBALL" -C "$STAGE/node" --strip-components 1
 rm "/tmp/$NODE_TARBALL"
 
-echo "==> Installing $OPENCLAW_SPEC"
-mkdir -p "$STAGE/openclaw-install"
-pushd "$STAGE/openclaw-install" >/dev/null
-"$STAGE/node/bin/npm" init -y >/dev/null
-"$STAGE/node/bin/npm" install --no-fund --no-audit "$OPENCLAW_SPEC"
-popd >/dev/null
+if [[ -n "${OPENCLAW_SOURCE_DIR:-}" ]]; then
+  SOURCE_DIR="$OPENCLAW_SOURCE_DIR"
+  [[ "$SOURCE_DIR" != /* ]] && SOURCE_DIR="$REPO_ROOT/$SOURCE_DIR"
+  echo "==> Building OpenClaw from source: $SOURCE_DIR (our fork)"
+  pushd "$SOURCE_DIR" >/dev/null
+  corepack enable >/dev/null 2>&1 || true
+  pnpm install
+  pnpm build
+  echo "==> Packing built fork via npm pack"
+  PACK_FILE="$("$STAGE/node/bin/npm" pack --pack-destination /tmp 2>/dev/null | tail -1)"
+  popd >/dev/null
+  mkdir -p "$STAGE/openclaw"
+  tar -xzf "/tmp/$PACK_FILE" -C "$STAGE/openclaw" --strip-components 1
+  rm -f "/tmp/$PACK_FILE"
+  pushd "$STAGE/openclaw" >/dev/null
+  "$STAGE/node/bin/npm" install --omit=dev --no-fund --no-audit
+  popd >/dev/null
+else
+  echo "==> Installing $OPENCLAW_SPEC from npm"
+  mkdir -p "$STAGE/openclaw-install"
+  pushd "$STAGE/openclaw-install" >/dev/null
+  "$STAGE/node/bin/npm" init -y >/dev/null
+  "$STAGE/node/bin/npm" install --no-fund --no-audit "$OPENCLAW_SPEC"
+  popd >/dev/null
 
-# Flatten so the sidecar finds <Resources>/gateway/openclaw/openclaw.mjs.
-mv "$STAGE/openclaw-install/node_modules/openclaw" "$STAGE/openclaw"
-mv "$STAGE/openclaw-install/node_modules" "$STAGE/openclaw/node_modules_hoisted" 2>/dev/null || true
-rm -rf "$STAGE/openclaw-install"
+  # Flatten so the sidecar finds <Resources>/gateway/openclaw/openclaw.mjs.
+  mv "$STAGE/openclaw-install/node_modules/openclaw" "$STAGE/openclaw"
+  mv "$STAGE/openclaw-install/node_modules" "$STAGE/openclaw/node_modules_hoisted" 2>/dev/null || true
+  rm -rf "$STAGE/openclaw-install"
+fi
 
 echo "==> Gateway runtime staged. Now run scripts/make-app.sh"

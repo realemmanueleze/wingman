@@ -18,6 +18,29 @@ Wingman is a macOS menu-bar app that embeds an OpenClaw Gateway as a supervised 
 | `docs/` | `ARCHITECTURE.md`, `HARD-PROBLEMS.md` |
 | `Inspirations/` | Clicky + OpenClaw source snapshots |
 
+## For non-technical users
+
+Open `Wingman.app`. A setup wizard runs on first launch:
+
+1. **Welcome** — what Wingman is
+2. **Permissions** — approve Screen Recording, Microphone/Speech, Accessibility with one click each
+3. **Connect your AI** — pick Anthropic or OpenAI, paste an API key (link to the right console page is in the wizard); Wingman writes the OpenClaw config and restarts the gateway itself
+4. **Try it** — hold ⌃⌥ and talk
+
+No terminal at any point. The chat window (menu bar → **Open chat**) is the Claude-style work surface on the same brain; the buddy cursor is the screen-native surface.
+
+## Our OpenClaw fork
+
+`vendor/openclaw/` is our fork baseline (runtime + plugins + UI, pruned of upstream docs/tests/CI). We self-improve it from here and ship it inside the app:
+
+```bash
+make vendor-openclaw       # (re)copy the snapshot into vendor/openclaw
+make gateway-bundle-fork   # build OUR fork and stage it into the app bundle
+make app                   # → dist/Wingman.app with our gateway inside
+```
+
+`make gateway-bundle` still exists to bundle stock openclaw from npm instead.
+
 ## Quick start (development)
 
 ```bash

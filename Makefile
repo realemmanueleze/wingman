@@ -12,9 +12,17 @@ app: build
 app-release:
 	bash scripts/make-app.sh --release
 
-# Stage a self-contained Node + openclaw runtime into the app resources
+# Stage a self-contained Node + openclaw runtime into the app resources (from npm)
 gateway-bundle:
 	bash scripts/bundle-gateway.sh
+
+# Copy the OpenClaw snapshot into vendor/openclaw — our fork baseline
+vendor-openclaw:
+	bash scripts/vendor-openclaw.sh
+
+# Stage the gateway from OUR fork (vendor/openclaw) instead of npm
+gateway-bundle-fork:
+	OPENCLAW_SOURCE_DIR=vendor/openclaw bash scripts/bundle-gateway.sh
 
 # Typecheck the shared cross-platform core
 core-check:

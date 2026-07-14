@@ -13,6 +13,16 @@
 
 **Residual work.** Notarization requires signing every Mach-O inside the bundled Node runtime (`codesign --deep` handles the common case; the release pipeline should sign binaries explicitly and enable hardened runtime with the JIT entitlement Node needs).
 
+## 1b. Terminal-free onboarding for non-technical users
+
+**Problem.** `openclaw onboard` is a terminal wizard; our users should never see a shell.
+
+**Solution (implemented).**
+- `OnboardingView` — a native four-step wizard shown automatically on first launch (or whenever no provider is configured): welcome → permission cards with one-click grants → provider picker + API key field (with a "where do I get a key?" link) → how-to-use card.
+- `OnboardingManager.writeProviderConfig` writes the documented OpenClaw config shape (`env.<PROVIDER>_API_KEY` + `agents.defaults.model.primary`) into `~/.openclaw/openclaw.json`, merging with any existing config (0600 perms). The app then restarts the sidecar so the key takes effect.
+- Detection is idempotent: users who already ran `openclaw onboard` (env keys or OAuth auth profiles) get a "already configured — skip" path.
+- OAuth/subscription sign-in (ChatGPT/Codex-style) is the natural v2 of the provider step; API-key paste covers the launch.
+
 ## 2. TCC permissions that actually stick
 
 **Problem.** Screen Recording/Accessibility grants bind to (signing identity × bundle path); dev rebuilds silently invalidate them. Both inspiration codebases hit this.

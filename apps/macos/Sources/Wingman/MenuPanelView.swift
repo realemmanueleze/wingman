@@ -8,6 +8,13 @@ struct MenuPanelView: View {
         VStack(alignment: .leading, spacing: 12) {
             header
             Divider()
+            Button {
+                appModel.openChatWindow()
+            } label: {
+                Label("Open chat", systemImage: "bubble.left.and.bubble.right")
+                    .frame(maxWidth: .infinity)
+            }
+            .controlSize(.large)
             modePicker
             Toggle("Show buddy cursor", isOn: $appModel.showBuddy)
                 .toggleStyle(.switch)
@@ -122,12 +129,10 @@ struct MenuPanelView: View {
 
     private var footer: some View {
         HStack {
-            if !appModel.lastResponseText.isEmpty {
-                Text(appModel.lastResponseText)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+            Button("Setup…") {
+                appModel.openOnboardingWindow()
             }
+            .font(.caption)
             Spacer()
             Button("Quit") {
                 NSApp.terminate(nil)
