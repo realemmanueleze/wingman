@@ -1,11 +1,22 @@
 # Wingman
 
-One desktop product combining two inspirations:
+**A voice-first AI copilot for macOS.** Hold **⌃⌥** anywhere and talk — Wingman sees your screen, answers out loud, flies a pointer to the relevant UI, and can run real tasks on your machine through a full agent gateway.
 
-- **OpenClaw** (vendored fork at `vendor/openclaw`) — the brain: an always-on agent gateway with tools, memory, channels, and model routing.
-- **Clicky** (patterns reimplemented in `apps/macos`) — the face: a screen companion that sees your displays, talks, and points at UI.
+It pairs two halves into one double-clickable app:
 
-Wingman is a macOS menu-bar app that embeds an OpenClaw Gateway as a supervised sidecar and layers a Clicky-style buddy cursor on top. Hold **⌃⌥** anywhere, speak, and the assistant sees your screen, answers out loud, and flies a pointer to the relevant UI. Switch modes to let it actually do the work through gateway tools.
+- **The brain** — a vendored **OpenClaw** fork (`vendor/openclaw`) runs as a supervised sidecar: an always-on agent gateway with tools, memory, channels, and model routing.
+- **The face** — a native Swift menu-bar app (`apps/macos`) that captures your displays, listens, speaks, and points, with a screen-native buddy cursor.
+
+## Highlights
+
+- **Push-to-talk, anywhere** — a global ⌃⌥ hotkey (system-wide event tap) starts listening in any app; release to send.
+- **Streaming speech** — replies are spoken sentence-by-sentence as the model streams, so answers begin almost instantly instead of after the full response.
+- **On-device speech** — recognition runs locally (fast, offline, private) and TTS auto-selects the best installed system voice.
+- **Living top bar** — a slim "halo" line rests at the top-center of the screen and glows with voice activity; hover it and it expands into a command deck with mode controls and a session-history browser.
+- **Voice indicator** — an animated waveform at the bottom-center reflects listening / thinking / speaking.
+- **Voice commands** — app control ("act mode", "open chat", "stop talking") is handled locally with zero round-trip.
+- **Adaptive speed** — easy conversational turns skip the model's reasoning phase; real work keeps full depth.
+- **Points at UI** — the assistant can fly a cursor to a specific on-screen element via the `[POINT]` contract.
 
 ## Layout
 
@@ -65,7 +76,7 @@ make gateway-bundle && make app
 
 First launch walks through permissions in the menu-bar panel: Screen Recording, Microphone, Accessibility (hotkey), Speech Recognition.
 
-**TCC warning:** permissions bind to signing identity + path. For permission testing, install to a stable path and sign with a real identity (`SIGN_IDENTITY="Developer ID Application: …" make app-release`). Ad-hoc builds re-prompt on every rebuild.
+**TCC warning:** permissions bind to signing identity + path. Ad-hoc builds generate a fresh signature on every rebuild, so macOS re-prompts (or silently drops) permissions each time. `make-app.sh` automatically uses a stable **"Wingman Dev"** self-signed identity if one exists in your keychain — create it once (Keychain Access → *Create a Certificate…*, type *Code Signing*) so Screen Recording / Microphone / Accessibility grants stick across rebuilds. Override with `SIGN_IDENTITY="Developer ID Application: …" make app` for release signing.
 
 ## Modes
 
@@ -76,6 +87,25 @@ First launch walks through permissions in the menu-bar panel: Screen Recording, 
 | **Act** | `wingman-main` | Full operator agent under gateway policy. |
 
 The client only *selects* the session; the gateway enforces tool policy. See `docs/HARD-PROBLEMS.md`.
+
+## Voice commands
+
+Short spoken phrases are handled on-device (no gateway round-trip) — say them while holding ⌃⌥:
+
+| Say | Does |
+|-----|------|
+| "act mode" / "teach mode" / "ask before acting" | Switch mode |
+| "open chat" / "close chat" | Toggle the chat window |
+| "show buddy" / "hide buddy" | Toggle the buddy cursor |
+| "stop talking" | Cut off speech immediately |
+
+Anything longer or unrecognized is sent to the agent as a normal request.
+
+## Voice quality
+
+Wingman automatically uses the best-quality voice installed on your Mac. The default system voices are robotic; for a natural voice, install a **Premium** one (free, one-time):
+
+**System Settings → Accessibility → Spoken Content → System Voice → Manage Voices…**, then download e.g. *Ava (Premium)* under English. Restart Wingman and it's picked up automatically.
 
 ## One product, more platforms
 
