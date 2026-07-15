@@ -32,6 +32,10 @@ final class AppModel: ObservableObject {
     @Published private(set) var isChatTurnRunning = false
     @Published var attachScreenToNextChatTurn = false
 
+    // Sessions browser state (top bar history tab).
+    @Published private(set) var sessionSummaries: [GatewayClient.SessionSummary] = []
+    @Published private(set) var isLoadingSessions = false
+
     let gatewaySidecar = GatewaySidecar()
     let gatewayClient = GatewayClient()
     let permissions = PermissionsManager()
@@ -39,6 +43,8 @@ final class AppModel: ObservableObject {
     let onboarding = OnboardingManager()
 
     private let overlayController = OverlayWindowController()
+    private let voiceIndicator = VoiceIndicatorController()
+    private let topBar = TopBarController()
     private let pushToTalk = PushToTalkMonitor()
     private var currentTurnTask: Task<Void, Never>?
     private var chatWindow: NSWindow?
@@ -59,6 +65,8 @@ final class AppModel: ObservableObject {
         if showBuddy {
             overlayController.show()
         }
+        voiceIndicator.show(speech: speech, appModel: self)
+        topBar.show(appModel: self)
 
         Task { await connectToGatewayWhenReady() }
 
@@ -75,6 +83,8 @@ final class AppModel: ObservableObject {
         gatewayClient.disconnect()
         gatewaySidecar.stop()
         overlayController.hide()
+        voiceIndicator.hide()
+        topBar.hide()
     }
 
     private func connectToGatewayWhenReady() async {
@@ -97,8 +107,17 @@ final class AppModel: ObservableObject {
     // MARK: - Turn pipeline
 
     private func beginListening() {
-        guard voiceState == .idle else { return }
+        guard voiceState != .listening else { return }
+        // The hotkey always wins: a stuck or in-flight turn should never
+        // leave voice input dead. Cancel it and listen fresh.
+        if voiceState != .idle {
+            DebugLog.write("beginListening: preempting voiceState=\(voiceState)")
+            currentTurnTask?.cancel()
+            currentTurnTask = nil
+            resetToIdle()
+        }
         guard permissions.hasMicrophone else {
+            DebugLog.write("beginListening: no microphone permission, requesting")
             permissions.requestMicrophone()
             return
         }
@@ -108,6 +127,7 @@ final class AppModel: ObservableObject {
             voiceState = .listening
             overlayModel.activity = .listening
         } catch {
+            DebugLog.write("beginListening: startListening failed: \(error)")
             lastErrorText = "Could not start microphone: \(error.localizedDescription)"
         }
     }
@@ -125,7 +145,33 @@ final class AppModel: ObservableObject {
                 self.resetToIdle()
                 return
             }
+            // App-control phrases short-circuit locally: instant, no
+            // gateway round-trip.
+            if let command = VoiceCommand.parse(transcript) {
+                self.handle(voiceCommand: command)
+                return
+            }
             await self.runTurn(transcript: transcript)
+        }
+    }
+
+    private func handle(voiceCommand: VoiceCommand) {
+        switch voiceCommand {
+        case .switchMode(let mode):
+            turnMode = mode
+        case .openChat:
+            openChatWindow()
+        case .closeChat:
+            chatWindow?.close()
+        case .showBuddy(let visible):
+            showBuddy = visible
+        case .stopTalking:
+            speech.stopSpeaking()
+        }
+        resetToIdle()
+        let confirmation = voiceCommand.confirmation
+        if !confirmation.isEmpty {
+            speech.speak(confirmation)
         }
     }
 
@@ -148,11 +194,22 @@ final class AppModel: ObservableObject {
                 message += "\n\n[attached screenshots]\n\(labels)"
             }
 
+            // Speak each sentence as it streams in, instead of sitting silent
+            // until the whole reply lands. The streamer withholds the
+            // trailing [POINT:...] tag so it is never spoken.
+            let streamer = SentenceStreamer()
             let responseText = try await gatewayClient.runAgentTurn(
                 message: message,
                 sessionKey: policy.sessionKey,
                 extraSystemPrompt: policy.systemPromptFragments.joined(separator: "\n\n"),
-                imageAttachments: captures.map { (data: $0.jpegData, mimeType: "image/jpeg") }
+                imageAttachments: captures.map { (data: $0.jpegData, mimeType: "image/jpeg") },
+                thinking: TurnEffort.thinkingLevel(for: transcript),
+                onDelta: { [weak self] delta in
+                    guard let self, self.voiceState == .processing else { return }
+                    for sentence in streamer.ingest(delta) {
+                        self.speech.enqueue(sentence)
+                    }
+                }
             )
             guard !Task.isCancelled else { return }
 
@@ -169,7 +226,14 @@ final class AppModel: ObservableObject {
             }
 
             voiceState = .responding
-            speech.speak(parsed.spokenText)
+            if streamer.emittedAny {
+                // Streaming already spoke most of the reply; finish with the
+                // leftover partial sentence (point tag stripped).
+                let tail = PointTag.parse(streamer.flush()).spokenText
+                if !tail.isEmpty { speech.enqueue(tail) }
+            } else {
+                speech.speak(parsed.spokenText)
+            }
 
             // Return the buddy to the mouse after the pointing moment passes.
             Task { [weak self] in
@@ -261,6 +325,24 @@ final class AppModel: ObservableObject {
                 )
             }
         }
+    }
+
+    // MARK: - Sessions browser
+
+    func refreshSessions() {
+        guard !isLoadingSessions else { return }
+        isLoadingSessions = true
+        Task { [weak self] in
+            guard let self else { return }
+            defer { self.isLoadingSessions = false }
+            if let sessions = try? await self.gatewayClient.listSessions() {
+                self.sessionSummaries = sessions
+            }
+        }
+    }
+
+    func loadHistory(sessionKey: String) async -> [GatewayClient.HistoryMessage] {
+        (try? await gatewayClient.fetchChatHistory(sessionKey: sessionKey)) ?? []
     }
 
     // MARK: - Windows

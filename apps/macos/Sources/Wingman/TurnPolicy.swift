@@ -45,6 +45,10 @@ struct TurnPolicy {
     format: [POINT:x,y:label] with integer pixel coordinates and a short 1-3 word label. if the element is on a different screen than the cursor, append :screenN using the screen number from the image label. if pointing would not help, append [POINT:none].
     """
 
+    static let actPrompt = """
+    you are in ACT mode with the full openclaw capability set available on this gateway: shell commands, file reads and writes, browsing, messaging, memory, and any other configured tools. when the user asks for an action, perform it now rather than describing what you would do, then confirm the outcome in one short spoken sentence.
+    """
+
     static let voiceStylePrompt = """
     your reply will be spoken aloud via text-to-speech. write the way you'd actually talk: one or two direct sentences by default, all natural speech, no lists, no markdown, no symbols that sound weird read aloud. if the user's question relates to what's on their screen, reference specific things you see.
     """
@@ -70,7 +74,7 @@ struct TurnPolicy {
                 mode: mode,
                 sessionKey: "wingman-main",
                 attachScreenCaptures: true,
-                systemPromptFragments: [Self.voiceStylePrompt, Self.pointingPrompt]
+                systemPromptFragments: [Self.voiceStylePrompt, Self.actPrompt, Self.pointingPrompt]
             )
         }
     }

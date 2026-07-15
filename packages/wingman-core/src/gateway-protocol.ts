@@ -34,21 +34,36 @@ export type EventFrame = {
 
 export type GatewayFrame = RequestFrame | ResponseFrame | EventFrame;
 
-/** Client identity sent on connect. Wingman connects as an operator UI client. */
+/**
+ * Client identity sent on connect.
+ * Use `gateway-client` + `backend` with a shared loopback token so OpenClaw
+ * preserves operator scopes without device pairing (ui mode clears them).
+ */
 export type ConnectClientInfo = {
   id: "gateway-client";
   displayName?: string;
   version: string;
   platform: string;
   deviceFamily?: string;
-  mode: "ui";
+  mode: "backend";
   instanceId?: string;
 };
+
+/** Default operator scopes for Wingman shells (includes agent `operator.write`). */
+export const WINGMAN_OPERATOR_SCOPES = [
+  "operator.admin",
+  "operator.read",
+  "operator.write",
+  "operator.approvals",
+  "operator.pairing",
+] as const;
 
 export type ConnectParams = {
   minProtocol: number;
   maxProtocol: number;
   client: ConnectClientInfo;
+  role?: "operator";
+  scopes?: readonly string[];
   auth?: { token?: string; password?: string; deviceToken?: string };
   locale?: string;
   userAgent?: string;
@@ -69,9 +84,11 @@ export function buildConnectParams(options: {
       displayName: options.displayName,
       version: options.version,
       platform: options.platform,
-      mode: "ui",
+      mode: "backend",
       instanceId: options.instanceId,
     },
+    role: "operator",
+    scopes: [...WINGMAN_OPERATOR_SCOPES],
     auth: options.token ? { token: options.token } : undefined,
   };
 }

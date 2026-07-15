@@ -27,6 +27,9 @@ final class GatewayClient: NSObject, ObservableObject {
     private var pendingFinalResponses: [String: CheckedContinuation<[String: Any], Error>] = [:]
     /// Collected assistant text per runId, streamed via `agent` events.
     private var runTextBuffers: [String: String] = [:]
+    /// Live delta subscribers per runId, so callers can speak/render text
+    /// as it streams instead of waiting for the run to finish.
+    private var runDeltaHandlers: [String: (String) -> Void] = [:]
 
     struct GatewayError: Error, LocalizedError {
         let message: String
@@ -42,6 +45,10 @@ final class GatewayClient: NSObject, ObservableObject {
         task.resume()
         receiveLoop()
 
+        // gateway-client + backend + shared token is OpenClaw's device-less
+        // loopback trust path: requested scopes are preserved. ui mode clears
+        // unbound scopes without device pairing, which yields missing
+        // operator.write on agent turns.
         let connectParams: [String: Any] = [
             "minProtocol": 4,
             "maxProtocol": 4,
@@ -50,8 +57,16 @@ final class GatewayClient: NSObject, ObservableObject {
                 "displayName": "Wingman",
                 "version": "0.1.0",
                 "platform": "darwin",
-                "mode": "ui",
+                "mode": "backend",
                 "instanceId": ProcessInfo.processInfo.globallyUniqueString,
+            ],
+            "role": "operator",
+            "scopes": [
+                "operator.admin",
+                "operator.read",
+                "operator.write",
+                "operator.approvals",
+                "operator.pairing",
             ],
             "auth": ["token": token],
         ]
@@ -72,7 +87,9 @@ final class GatewayClient: NSObject, ObservableObject {
         message: String,
         sessionKey: String,
         extraSystemPrompt: String,
-        imageAttachments: [(data: Data, mimeType: String)]
+        imageAttachments: [(data: Data, mimeType: String)],
+        thinking: String? = nil,
+        onDelta: ((String) -> Void)? = nil
     ) async throws -> String {
         let attachments: [[String: Any]] = imageAttachments.map { attachment in
             [
@@ -95,6 +112,10 @@ final class GatewayClient: NSObject, ObservableObject {
         if !attachments.isEmpty {
             params["attachments"] = attachments
         }
+        // "off" skips the model's reasoning phase on easy turns for speed.
+        if let thinking {
+            params["thinking"] = thinking
+        }
 
         // First res is an immediate ack with the runId; the run itself
         // completes asynchronously and a second res (same id) closes it.
@@ -102,6 +123,15 @@ final class GatewayClient: NSObject, ObservableObject {
             method: "agent", params: params, timeoutSeconds: 30
         )
         let runId = (ackPayload["runId"] as? String) ?? ""
+        if let onDelta {
+            // Replay anything that streamed in between the ack and now,
+            // then subscribe for live deltas.
+            if let alreadyBuffered = runTextBuffers[runId], !alreadyBuffered.isEmpty {
+                onDelta(alreadyBuffered)
+            }
+            runDeltaHandlers[runId] = onDelta
+        }
+        defer { runDeltaHandlers.removeValue(forKey: runId) }
 
         let finalPayload: [String: Any] = try await withThrowingTaskGroup(of: [String: Any].self) { group in
             group.addTask { @MainActor in
@@ -128,6 +158,80 @@ final class GatewayClient: NSObject, ObservableObject {
         if let summary = finalPayload["summary"] as? String, !summary.isEmpty { return summary }
         if let reply = finalPayload["reply"] as? String, !reply.isEmpty { return reply }
         throw GatewayError(message: "Agent run finished without assistant text (runId \(runId)).")
+    }
+
+    // MARK: - Sessions browsing
+
+    struct SessionSummary: Identifiable, Equatable {
+        let key: String
+        let title: String
+        let preview: String?
+        let updatedAt: Date?
+        var id: String { key }
+    }
+
+    struct HistoryMessage: Identifiable, Equatable {
+        let id = UUID()
+        let role: String
+        let text: String
+    }
+
+    func listSessions(limit: Int = 40) async throws -> [SessionSummary] {
+        let payload = try await request(
+            method: "sessions.list",
+            params: [
+                "limit": limit,
+                "includeDerivedTitles": true,
+                "includeLastMessage": true,
+            ]
+        )
+        let rows = payload["sessions"] as? [[String: Any]] ?? []
+        return rows.map { row in
+            let key = row["key"] as? String ?? "unknown"
+            let title = (row["derivedTitle"] as? String)
+                ?? (row["displayName"] as? String)
+                ?? (row["label"] as? String)
+                ?? key
+            let preview = (row["lastMessage"] as? String)
+                ?? ((row["lastMessage"] as? [String: Any])?["text"] as? String)
+            var updatedAt: Date?
+            if let ms = row["updatedAt"] as? Double {
+                updatedAt = Date(timeIntervalSince1970: ms / 1000)
+            } else if let ms = row["updatedAt"] as? Int {
+                updatedAt = Date(timeIntervalSince1970: Double(ms) / 1000)
+            }
+            return SessionSummary(key: key, title: title, preview: preview, updatedAt: updatedAt)
+        }
+    }
+
+    func fetchChatHistory(sessionKey: String, limit: Int = 60) async throws -> [HistoryMessage] {
+        let payload = try await request(
+            method: "chat.history",
+            params: ["sessionKey": sessionKey, "limit": limit]
+        )
+        let rows = payload["messages"] as? [[String: Any]] ?? []
+        return rows.compactMap { Self.parseHistoryMessage(row: $0) }
+    }
+
+    /// Transcript messages carry content as a string or as typed part arrays;
+    /// flatten to displayable text and drop tool/system noise.
+    private static func parseHistoryMessage(row: [String: Any]) -> HistoryMessage? {
+        let role = row["role"] as? String ?? "assistant"
+        guard role == "user" || role == "assistant" else { return nil }
+
+        var text = ""
+        if let content = row["content"] as? String {
+            text = content
+        } else if let parts = row["content"] as? [[String: Any]] {
+            text = parts.compactMap { part in
+                (part["type"] as? String) == "text" ? part["text"] as? String : nil
+            }.joined(separator: "\n")
+        } else if let plain = row["text"] as? String {
+            text = plain
+        }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return HistoryMessage(role: role, text: trimmed)
     }
 
     // MARK: - Wire plumbing
@@ -240,13 +344,17 @@ final class GatewayClient: NSObject, ObservableObject {
 
     private func handleAgentEvent(payload: [String: Any]) {
         guard let runId = payload["runId"] as? String,
+              payload["stream"] as? String == "assistant",
               let eventData = payload["data"] as? [String: Any]
         else { return }
-        // Assistant text deltas arrive in stream data; accumulate per run.
-        if let text = eventData["text"] as? String {
-            runTextBuffers[runId, default: ""] += text
-        } else if let delta = eventData["delta"] as? String {
+        // Assistant events carry cumulative `text` plus incremental `delta`.
+        // Append only deltas; a text-only event is the full reply, so it
+        // replaces the buffer. Appending `text` each time duplicates output.
+        if let delta = eventData["delta"] as? String, !delta.isEmpty {
             runTextBuffers[runId, default: ""] += delta
+            runDeltaHandlers[runId]?(delta)
+        } else if let text = eventData["text"] as? String, !text.isEmpty {
+            runTextBuffers[runId] = text
         }
     }
 }
